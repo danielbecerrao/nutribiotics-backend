@@ -2,6 +2,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Doctor, Patient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrescriptionPdfRenderer } from './pdf/prescription-pdf.renderer';
 import { PrescriptionsService } from './prescriptions.service';
 
 describe('PrescriptionsService', () => {
@@ -26,6 +27,10 @@ describe('PrescriptionsService', () => {
         {
           provide: PrismaService,
           useValue: prismaService,
+        },
+        {
+          provide: PrescriptionPdfRenderer,
+          useValue: { render: jest.fn() },
         },
       ],
     }).compile();

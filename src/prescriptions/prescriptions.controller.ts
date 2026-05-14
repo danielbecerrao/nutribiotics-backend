@@ -1,5 +1,15 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+} from '@nestjs/common';
 import { Role } from '@prisma/client';
+import type { Response } from 'express';
 import type { AccessTokenPayload } from '../auth/types/access-token-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,6 +38,28 @@ export class PrescriptionsController {
     @Query() query: ListDoctorPrescriptionsQueryDto,
   ) {
     return this.prescriptionsService.listDoctorPrescriptions(userId, query);
+  }
+
+  @Roles(Role.doctor, Role.patient, Role.admin)
+  @Get(':id/pdf')
+  async downloadPrescriptionPdf(
+    @CurrentUser() user: AccessTokenPayload,
+    @Param('id') prescriptionId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { pdf, filename } =
+      await this.prescriptionsService.getPrescriptionPdfForAuthenticatedUser(
+        user,
+        prescriptionId,
+      );
+
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+
+    return pdf;
   }
 
   @Roles(Role.doctor, Role.patient)

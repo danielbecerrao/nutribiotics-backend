@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrescriptionStatus, Prisma, Role } from '@prisma/client';
-import { AccessTokenPayload } from '../auth/types/access-token-payload.type';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.type';
 import { buildPrismaDateRangeFilter } from '../common/helpers/prisma-date-filter.helper';
 import {
   buildPaginatedResponse,
@@ -17,6 +17,8 @@ import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { ListDoctorPrescriptionsQueryDto } from './dto/list-doctor-prescriptions-query.dto';
 import { ListPatientPrescriptionsQueryDto } from './dto/list-patient-prescriptions-query.dto';
 import { generatePrescriptionCode } from './helpers/generate-prescription-code';
+import { PrescriptionPdfRenderer } from './pdf/prescription-pdf.renderer';
+import { toPrescriptionPdfData } from './pdf/prescription-pdf-data';
 import { prescriptionWithRelations } from './types/prescription-with-relations.type';
 import { toPublicPrescription } from './utils/to-public-prescription';
 
@@ -24,7 +26,10 @@ type PrismaExecutor = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class PrescriptionsService {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly prescriptionPdfRenderer: PrescriptionPdfRenderer,
+  ) {}
 
   generateCode() {
     return generatePrescriptionCode();
@@ -138,6 +143,24 @@ export class PrescriptionsService {
     return this.getPatientPrescriptionById(user.sub, prescriptionId);
   }
 
+  async getPrescriptionPdfForAuthenticatedUser(
+    user: AccessTokenPayload,
+    prescriptionId: string,
+  ) {
+    const prescription = await this.findPrescriptionForDownload(
+      user,
+      prescriptionId,
+    );
+    const pdf = await this.prescriptionPdfRenderer.render(
+      toPrescriptionPdfData(prescription),
+    );
+
+    return {
+      pdf,
+      filename: this.getPrescriptionPdfFilename(prescription.code),
+    };
+  }
+
   async getDoctorPrescriptionById(userId: string, prescriptionId: string) {
     const doctor = await this.getDoctorFromAuthenticatedUser(userId);
     const prescription = await this.prismaService.prescription.findFirst({
@@ -199,6 +222,36 @@ export class PrescriptionsService {
     });
 
     return toPublicPrescription(updatedPrescription);
+  }
+
+  private async findPrescriptionForDownload(
+    user: AccessTokenPayload,
+    prescriptionId: string,
+  ) {
+    const prescription = await this.prismaService.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: prescriptionWithRelations,
+    });
+
+    if (!prescription) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    const canDownload =
+      user.role === Role.admin ||
+      (user.role === Role.doctor && prescription.author.userId === user.sub) ||
+      (user.role === Role.patient && prescription.patient.userId === user.sub);
+
+    if (!canDownload) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    return prescription;
+  }
+
+  private getPrescriptionPdfFilename(code: string) {
+    const safeCode = code.replace(/[^a-zA-Z0-9-]/g, '-');
+    return `prescription-${safeCode}.pdf`;
   }
 
   async getDoctorFromAuthenticatedUser(
