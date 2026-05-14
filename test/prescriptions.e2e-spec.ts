@@ -43,6 +43,7 @@ interface PrescriptionResponseBody {
 }
 
 interface PrescriptionTestData {
+  adminUser: User;
   doctorUser: User;
   otherDoctorUser: User;
   patientUser: User;
@@ -84,6 +85,12 @@ async function upsertUser(
 async function prepareTestData(
   prismaService: PrismaService,
 ): Promise<PrescriptionTestData> {
+  const adminUser = await upsertUser(prismaService, {
+    email: 'rx-admin@test.com',
+    password: 'admin123',
+    name: 'Prescription Admin',
+    role: Role.admin,
+  });
   const doctorUser = await upsertUser(prismaService, {
     email: 'rx-doctor@test.com',
     password: 'doctor123',
@@ -143,6 +150,7 @@ async function prepareTestData(
   });
 
   return {
+    adminUser,
     doctorUser,
     otherDoctorUser,
     patientUser,
@@ -410,6 +418,67 @@ describe('Prescriptions (e2e)', () => {
       .expect({
         message: 'Prescription already consumed',
         code: 'CONFLICT',
+        details: {},
+      });
+  });
+
+  it('/prescriptions/:id/pdf (GET) returns a downloadable PDF', async () => {
+    const token = await login(testData.doctorUser.email, 'doctor123');
+    const prescription = await createPendingPrescription();
+
+    const response = await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}/pdf`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain(
+      `prescription-${prescription.code}.pdf`,
+    );
+  });
+
+  it('/prescriptions/:id/pdf (GET) enforces related-user permissions', async () => {
+    const prescription = await createPendingPrescription();
+    const doctorToken = await login(testData.doctorUser.email, 'doctor123');
+    const patientToken = await login(testData.patientUser.email, 'patient123');
+    const adminToken = await login(testData.adminUser.email, 'admin123');
+    const otherDoctorToken = await login(
+      testData.otherDoctorUser.email,
+      'doctor123',
+    );
+    const otherPatientToken = await login(
+      testData.otherPatientUser.email,
+      'patient123',
+    );
+
+    await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}/pdf`)
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}/pdf`)
+      .set('Authorization', `Bearer ${patientToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}/pdf`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}/pdf`)
+      .set('Authorization', `Bearer ${otherDoctorToken}`)
+      .expect(404)
+      .expect({
+        message: 'Prescription not found',
+        code: 'NOT_FOUND',
+        details: {},
+      });
+    await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}/pdf`)
+      .set('Authorization', `Bearer ${otherPatientToken}`)
+      .expect(404)
+      .expect({
+        message: 'Prescription not found',
+        code: 'NOT_FOUND',
         details: {},
       });
   });
