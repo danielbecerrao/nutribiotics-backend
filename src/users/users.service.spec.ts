@@ -40,7 +40,9 @@ describe('UsersService', () => {
 
     findUnique.mockResolvedValue(user);
 
-    await expect(usersService.findByEmail(' admin@test.com ')).resolves.toEqual(user);
+    await expect(usersService.findByEmail(' admin@test.com ')).resolves.toEqual(
+      user,
+    );
     expect(findUnique).toHaveBeenCalledWith({
       where: { email: 'admin@test.com' },
     });
