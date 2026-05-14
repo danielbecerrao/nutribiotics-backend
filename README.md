@@ -63,6 +63,16 @@ Test accounts:
 - Doctor: `dr@test.com` / `dr123`
 - Patient: `patient@test.com` / `patient123`
 
+## API documentation
+
+Swagger UI is available at:
+
+- Local backend: `http://localhost:3000/docs`
+- Docker Compose backend: `http://localhost:3001/docs`
+
+Use `POST /auth/login` to obtain an access token, then authorize the docs with
+the bearer token to try protected endpoints.
+
 ## Compile and run the project
 
 ```bash
