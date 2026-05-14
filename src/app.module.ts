@@ -11,6 +11,8 @@ import { AuthModule } from './auth/auth.module';
 import { envValidationSchema } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { DoctorsModule } from './doctors/doctors.module';
+import { PatientsModule } from './patients/patients.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
@@ -49,6 +51,8 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     UsersModule,
     AuthModule,
+    PatientsModule,
+    DoctorsModule,
   ],
   controllers: [AppController],
   providers: [
