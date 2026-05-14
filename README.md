@@ -31,6 +31,24 @@
 $ npm install
 ```
 
+## Environment variables
+
+Create a local `.env` file from the example before running the API outside Docker:
+
+```bash
+$ cp .env.example .env
+```
+
+Required variables:
+
+- `DATABASE_URL`: PostgreSQL connection string.
+- `JWT_ACCESS_SECRET`: secret used to sign access tokens.
+- `JWT_REFRESH_SECRET`: secret used to sign refresh tokens.
+- `JWT_ACCESS_TTL`: access token lifetime, for example `900s`.
+- `JWT_REFRESH_TTL`: refresh token lifetime, for example `7d`.
+- `APP_ORIGIN`: frontend origin allowed by the API.
+- `PORT`: HTTP port used by NestJS.
+
 ## Compile and run the project
 
 ```bash
