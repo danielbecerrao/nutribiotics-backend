@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import {
+  buildPaginatedResponse,
+  getPagination,
+} from '../common/helpers/pagination.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListPatientsQueryDto } from './dto/list-patients-query.dto';
 
@@ -8,9 +12,7 @@ export class PatientsService {
   constructor(private readonly prismaService: PrismaService) {}
 
   async listPatients(query: ListPatientsQueryDto) {
-    const page = query.page;
-    const limit = query.limit;
-    const skip = (page - 1) * limit;
+    const pagination = getPagination(query);
     const where: Prisma.PatientWhereInput = {};
 
     if (query.q) {
@@ -35,17 +37,11 @@ export class PatientsService {
             createdAt: 'desc',
           },
         },
-        skip,
-        take: limit,
+        skip: pagination.skip,
+        take: pagination.take,
       }),
     ]);
 
-    return {
-      data,
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    };
+    return buildPaginatedResponse(data, total, pagination);
   }
 }

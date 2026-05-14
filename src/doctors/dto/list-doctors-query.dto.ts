@@ -1,25 +1,7 @@
-import { Type } from 'class-transformer';
-import {
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
-export class ListDoctorsQueryDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page = 1;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit = 20;
-
+export class ListDoctorsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
