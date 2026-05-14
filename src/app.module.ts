@@ -7,7 +7,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { SignOptions } from 'jsonwebtoken';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { JwtStrategy } from './auth/jwt.strategy';
+import { AuthModule } from './auth/auth.module';
 import { envValidationSchema } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -48,11 +48,11 @@ import { UsersModule } from './users/users.module';
     }),
     PrismaModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    JwtStrategy,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

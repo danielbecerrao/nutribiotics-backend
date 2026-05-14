@@ -36,6 +36,13 @@ export class UsersService {
     });
   }
 
+  updateRefreshTokenHash(id: string, refreshTokenHash: string | null) {
+    return this.prismaService.user.update({
+      where: { id },
+      data: { refreshTokenHash },
+    });
+  }
+
   async createUser(input: CreateUserDto) {
     const email = normalizeEmail(input.email);
     const password = await bcrypt.hash(input.password, PASSWORD_HASH_ROUNDS);

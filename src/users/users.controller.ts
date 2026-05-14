@@ -1,16 +1,10 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { Role, User } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UsersService } from './users.service';
-
-type PublicUser = Omit<User, 'password'>;
-
-function toPublicUser(user: User): PublicUser {
-  const { password: _password, ...publicUser } = user;
-  return publicUser;
-}
+import { toPublicUser } from './utils/to-public-user';
 
 @Controller('users')
 export class UsersController {
@@ -34,4 +28,3 @@ export class UsersController {
     return toPublicUser(user);
   }
 }
-
