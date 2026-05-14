@@ -1,9 +1,11 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { PrescriptionStatus, Prisma, Role } from '@prisma/client';
+import { AccessTokenPayload } from '../auth/types/access-token-payload.type';
 import { buildPrismaDateRangeFilter } from '../common/helpers/prisma-date-filter.helper';
 import {
   buildPaginatedResponse,
@@ -13,6 +15,7 @@ import { getCreatedAtOrder } from '../common/helpers/sort-order.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { ListDoctorPrescriptionsQueryDto } from './dto/list-doctor-prescriptions-query.dto';
+import { ListPatientPrescriptionsQueryDto } from './dto/list-patient-prescriptions-query.dto';
 import { generatePrescriptionCode } from './helpers/generate-prescription-code';
 import { prescriptionWithRelations } from './types/prescription-with-relations.type';
 import { toPublicPrescription } from './utils/to-public-prescription';
@@ -92,6 +95,49 @@ export class PrescriptionsService {
     );
   }
 
+  async listPatientPrescriptions(
+    userId: string,
+    query: ListPatientPrescriptionsQueryDto,
+  ) {
+    const patient = await this.getPatientFromAuthenticatedUser(userId);
+    const pagination = getPagination(query);
+    const where: Prisma.PrescriptionWhereInput = {
+      patientId: patient.id,
+    };
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    const [total, data] = await this.prismaService.$transaction([
+      this.prismaService.prescription.count({ where }),
+      this.prismaService.prescription.findMany({
+        where,
+        include: prescriptionWithRelations,
+        orderBy: getCreatedAtOrder(),
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+    ]);
+
+    return buildPaginatedResponse(
+      data.map(toPublicPrescription),
+      total,
+      pagination,
+    );
+  }
+
+  async getPrescriptionByIdForAuthenticatedUser(
+    user: AccessTokenPayload,
+    prescriptionId: string,
+  ) {
+    if (user.role === Role.doctor) {
+      return this.getDoctorPrescriptionById(user.sub, prescriptionId);
+    }
+
+    return this.getPatientPrescriptionById(user.sub, prescriptionId);
+  }
+
   async getDoctorPrescriptionById(userId: string, prescriptionId: string) {
     const doctor = await this.getDoctorFromAuthenticatedUser(userId);
     const prescription = await this.prismaService.prescription.findFirst({
@@ -109,6 +155,52 @@ export class PrescriptionsService {
     return toPublicPrescription(prescription);
   }
 
+  async getPatientPrescriptionById(userId: string, prescriptionId: string) {
+    const patient = await this.getPatientFromAuthenticatedUser(userId);
+    const prescription = await this.prismaService.prescription.findFirst({
+      where: {
+        id: prescriptionId,
+        patientId: patient.id,
+      },
+      include: prescriptionWithRelations,
+    });
+
+    if (!prescription) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    return toPublicPrescription(prescription);
+  }
+
+  async consumePrescription(userId: string, prescriptionId: string) {
+    const patient = await this.getPatientFromAuthenticatedUser(userId);
+    const prescription = await this.prismaService.prescription.findFirst({
+      where: {
+        id: prescriptionId,
+        patientId: patient.id,
+      },
+    });
+
+    if (!prescription) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    if (prescription.status !== PrescriptionStatus.pending) {
+      throw new ConflictException('Prescription already consumed');
+    }
+
+    const updatedPrescription = await this.prismaService.prescription.update({
+      where: { id: prescription.id },
+      data: {
+        status: PrescriptionStatus.consumed,
+        consumedAt: new Date(),
+      },
+      include: prescriptionWithRelations,
+    });
+
+    return toPublicPrescription(updatedPrescription);
+  }
+
   async getDoctorFromAuthenticatedUser(
     userId: string,
     database: PrismaExecutor = this.prismaService,
@@ -122,6 +214,21 @@ export class PrescriptionsService {
     }
 
     return doctor;
+  }
+
+  async getPatientFromAuthenticatedUser(
+    userId: string,
+    database: PrismaExecutor = this.prismaService,
+  ) {
+    const patient = await database.patient.findUnique({
+      where: { userId },
+    });
+
+    if (!patient) {
+      throw new ForbiddenException('Authenticated user is not a patient');
+    }
+
+    return patient;
   }
 
   async verifyPatientExists(

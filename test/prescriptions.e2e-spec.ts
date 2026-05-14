@@ -18,6 +18,7 @@ interface PrescriptionResponseBody {
   code: string;
   status: string;
   notes: string | null;
+  consumedAt: string | null;
   patientId: string;
   authorId: string;
   items: Array<{
@@ -44,9 +45,12 @@ interface PrescriptionResponseBody {
 interface PrescriptionTestData {
   doctorUser: User;
   otherDoctorUser: User;
+  patientUser: User;
+  otherPatientUser: User;
   doctor: Doctor;
   otherDoctor: Doctor;
   patient: Patient;
+  otherPatient: Patient;
 }
 
 async function upsertUser(
@@ -98,6 +102,12 @@ async function prepareTestData(
     name: 'Prescription Patient',
     role: Role.patient,
   });
+  const otherPatientUser = await upsertUser(prismaService, {
+    email: 'rx-other-patient@test.com',
+    password: 'patient123',
+    name: 'Other Prescription Patient',
+    role: Role.patient,
+  });
 
   const doctor = await prismaService.doctor.upsert({
     where: { userId: doctorUser.id },
@@ -123,13 +133,24 @@ async function prepareTestData(
       birthDate: new Date('1990-05-15T00:00:00.000Z'),
     },
   });
+  const otherPatient = await prismaService.patient.upsert({
+    where: { userId: otherPatientUser.id },
+    update: { birthDate: new Date('1992-08-20T00:00:00.000Z') },
+    create: {
+      userId: otherPatientUser.id,
+      birthDate: new Date('1992-08-20T00:00:00.000Z'),
+    },
+  });
 
   return {
     doctorUser,
     otherDoctorUser,
+    patientUser,
+    otherPatientUser,
     doctor,
     otherDoctor,
     patient,
+    otherPatient,
   };
 }
 
@@ -146,6 +167,24 @@ describe('Prescriptions (e2e)', () => {
     const body = response.body as AuthResponseBody;
 
     return body.accessToken;
+  }
+
+  function createPendingPrescription(patientId = testData.patient.id) {
+    return prismaService.prescription.create({
+      data: {
+        code: `RX-E2E-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        notes: 'e2e: patient prescription',
+        patientId,
+        authorId: testData.doctor.id,
+        items: {
+          create: [
+            {
+              name: 'Acetaminofen 500mg',
+            },
+          ],
+        },
+      },
+    });
   }
 
   beforeAll(async () => {
@@ -255,6 +294,122 @@ describe('Prescriptions (e2e)', () => {
       .expect({
         message: 'Prescription not found',
         code: 'NOT_FOUND',
+        details: {},
+      });
+  });
+
+  it('/me/prescriptions (GET) lists prescriptions owned by the patient', async () => {
+    const token = await login(testData.patientUser.email, 'patient123');
+    const prescription = await createPendingPrescription();
+    await createPendingPrescription(testData.otherPatient.id);
+
+    const response = await request(app.getHttpServer())
+      .get('/me/prescriptions?status=pending&page=1&limit=10')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const body = response.body as {
+      data: PrescriptionResponseBody[];
+      total: number;
+      page: number;
+      limit: number;
+    };
+
+    expect(body.page).toBe(1);
+    expect(body.limit).toBe(10);
+    expect(body.total).toBeGreaterThanOrEqual(1);
+    expect(body.data.some((item) => item.id === prescription.id)).toBe(true);
+    expect(
+      body.data.every((item) => item.patientId === testData.patient.id),
+    ).toBe(true);
+  });
+
+  it('/prescriptions/:id (GET) allows patient owner and hides foreign detail', async () => {
+    const token = await login(testData.patientUser.email, 'patient123');
+    const prescription = await createPendingPrescription();
+    const foreignPrescription = await createPendingPrescription(
+      testData.otherPatient.id,
+    );
+
+    const detailResponse = await request(app.getHttpServer())
+      .get(`/prescriptions/${prescription.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const detail = detailResponse.body as PrescriptionResponseBody;
+
+    expect(detail.id).toBe(prescription.id);
+    expect(detail.patientId).toBe(testData.patient.id);
+
+    await request(app.getHttpServer())
+      .get(`/prescriptions/${foreignPrescription.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404)
+      .expect({
+        message: 'Prescription not found',
+        code: 'NOT_FOUND',
+        details: {},
+      });
+  });
+
+  it('/prescriptions/:id/consume (PUT) consumes a pending prescription owned by the patient', async () => {
+    const token = await login(testData.patientUser.email, 'patient123');
+    const prescription = await createPendingPrescription();
+
+    const response = await request(app.getHttpServer())
+      .put(`/prescriptions/${prescription.id}/consume`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const body = response.body as PrescriptionResponseBody;
+
+    expect(body.id).toBe(prescription.id);
+    expect(body.status).toBe('consumed');
+    expect(typeof body.consumedAt).toBe('string');
+    expect(body.patientId).toBe(testData.patient.id);
+  });
+
+  it('/prescriptions/:id/consume (PUT) hides prescriptions owned by another patient', async () => {
+    const token = await login(testData.patientUser.email, 'patient123');
+    const foreignPrescription = await createPendingPrescription(
+      testData.otherPatient.id,
+    );
+
+    return request(app.getHttpServer())
+      .put(`/prescriptions/${foreignPrescription.id}/consume`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404)
+      .expect({
+        message: 'Prescription not found',
+        code: 'NOT_FOUND',
+        details: {},
+      });
+  });
+
+  it('/prescriptions/:id/consume (PUT) returns conflict when prescription was already consumed', async () => {
+    const token = await login(testData.patientUser.email, 'patient123');
+    const prescription = await prismaService.prescription.create({
+      data: {
+        code: `RX-E2E-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        notes: 'e2e: already consumed prescription',
+        patientId: testData.patient.id,
+        authorId: testData.doctor.id,
+        status: 'consumed',
+        consumedAt: new Date(),
+        items: {
+          create: [
+            {
+              name: 'Ibuprofeno 400mg',
+            },
+          ],
+        },
+      },
+    });
+
+    return request(app.getHttpServer())
+      .put(`/prescriptions/${prescription.id}/consume`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(409)
+      .expect({
+        message: 'Prescription already consumed',
+        code: 'CONFLICT',
         details: {},
       });
   });
