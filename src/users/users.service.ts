@@ -1,6 +1,11 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import {
+  buildPaginatedResponse,
+  getPagination,
+} from '../common/helpers/pagination.helper';
+import { getCreatedAtOrder } from '../common/helpers/sort-order.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
@@ -69,10 +74,7 @@ export class UsersService {
   }
 
   async listUsers(query: ListUsersQueryDto) {
-    const page = query.page;
-    const limit = query.limit;
-    const skip = (page - 1) * limit;
-
+    const pagination = getPagination(query);
     const where: Prisma.UserWhereInput = {};
 
     if (query.role) {
@@ -93,20 +95,12 @@ export class UsersService {
       this.prismaService.user.count({ where }),
       this.prismaService.user.findMany({
         where,
-        orderBy: {
-          createdAt: 'desc',
-        },
-        skip,
-        take: limit,
+        orderBy: getCreatedAtOrder(),
+        skip: pagination.skip,
+        take: pagination.take,
       }),
     ]);
 
-    return {
-      data,
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    };
+    return buildPaginatedResponse(data, total, pagination);
   }
 }
