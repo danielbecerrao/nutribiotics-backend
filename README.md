@@ -49,6 +49,20 @@ Required variables:
 - `APP_ORIGIN`: frontend origin allowed by the API.
 - `PORT`: HTTP port used by NestJS.
 
+## Seed data
+
+After running migrations, seed the database with:
+
+```bash
+$ npm run prisma:seed
+```
+
+Test accounts:
+
+- Admin: `admin@test.com` / `admin123`
+- Doctor: `dr@test.com` / `dr123`
+- Patient: `patient@test.com` / `patient123`
+
 ## Compile and run the project
 
 ```bash
