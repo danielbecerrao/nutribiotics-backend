@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { DoctorsModule } from './doctors/doctors.module';
 import { PatientsModule } from './patients/patients.module';
+import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
@@ -53,6 +54,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     PatientsModule,
     DoctorsModule,
+    PrescriptionsModule,
   ],
   controllers: [AppController],
   providers: [
