@@ -1,8 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { configureApp } from './../src/common/bootstrap/configure-app';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,6 +15,7 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    configureApp(app, app.get(ConfigService));
     await app.init();
   });
 
@@ -21,6 +24,14 @@ describe('AppController (e2e)', () => {
       .get('/')
       .expect(200)
       .expect('Hello World!');
+  });
+
+  it('/missing (GET)', () => {
+    return request(app.getHttpServer()).get('/missing').expect(404).expect({
+      message: 'Cannot GET /missing',
+      code: 'NOT_FOUND',
+      details: {},
+    });
   });
 
   afterEach(async () => {
