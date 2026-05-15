@@ -11,6 +11,7 @@ import { toPublicPrescription } from '../prescriptions/utils/to-public-prescript
 import { PrismaService } from '../prisma/prisma.service';
 import { toPublicUser } from '../users/utils/to-public-user';
 import { AdminMetricsQueryDto } from './dto/admin-metrics-query.dto';
+import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 import { ListAdminPrescriptionsQueryDto } from './dto/list-admin-prescriptions-query.dto';
 
 const TOP_DOCTORS_LIMIT = 5;
@@ -86,11 +87,53 @@ export class AdminService {
     };
   }
 
+  async listAuditLogs(query: ListAuditLogsQueryDto) {
+    const pagination = getPagination(query);
+    const where: Prisma.AuditLogWhereInput = {};
+
+    if (query.action) {
+      where.action = query.action;
+    }
+
+    const [total, data] = await this.prismaService.$transaction([
+      this.prismaService.auditLog.count({ where }),
+      this.prismaService.auditLog.findMany({
+        where,
+        include: {
+          actor: true,
+          prescription: {
+            include: prescriptionWithRelations,
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+    ]);
+
+    return buildPaginatedResponse(
+      data.map((log) => ({
+        id: log.id,
+        action: log.action,
+        actor: log.actor ? toPublicUser(log.actor) : null,
+        createdAt: log.createdAt,
+        metadata: log.metadata,
+        prescription: log.prescription
+          ? toPublicPrescription(log.prescription)
+          : null,
+        prescriptionId: log.prescriptionId,
+      })),
+      total,
+      pagination,
+    );
+  }
+
   private buildPrescriptionWhere(query: {
     status?: PrescriptionStatus;
     doctorId?: string;
     patientId?: string;
     from?: string;
+    q?: string;
     to?: string;
   }) {
     const where: Prisma.PrescriptionWhereInput = {};
@@ -112,7 +155,39 @@ export class AdminService {
       where.createdAt = createdAt;
     }
 
+    this.applySearchFilter(where, query.q);
+
     return where;
+  }
+
+  private applySearchFilter(
+    where: Prisma.PrescriptionWhereInput,
+    search?: string,
+  ) {
+    const normalizedSearch = search?.trim();
+
+    if (!normalizedSearch) {
+      return;
+    }
+
+    where.OR = [
+      {
+        notes: {
+          contains: normalizedSearch,
+          mode: Prisma.QueryMode.insensitive,
+        },
+      },
+      {
+        items: {
+          some: {
+            name: {
+              contains: normalizedSearch,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+        },
+      },
+    ];
   }
 
   private buildStatusTotals(

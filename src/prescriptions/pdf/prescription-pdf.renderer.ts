@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
+import QRCode from 'qrcode';
 import { PrescriptionPdfData } from './prescription-pdf-data';
 
 interface TextCursor {
@@ -35,6 +36,7 @@ export class PrescriptionPdfRenderer {
     };
 
     this.drawTitle(context, data);
+    await this.drawQrCode(context, data.qrCodeValue);
     this.drawSection(context, 'Patient', [
       `Name: ${data.patient.name}`,
       `Email: ${data.patient.email}`,
@@ -73,6 +75,36 @@ export class PrescriptionPdfRenderer {
       color: rgb(0.25, 0.25, 0.25),
     });
     context.cursor.y -= 28;
+  }
+
+  private async drawQrCode(context: RenderContext, value: string) {
+    const dataUrl = await QRCode.toDataURL(value, {
+      margin: 1,
+      width: 128,
+    });
+    const imageData = dataUrl.split(',')[1];
+
+    if (!imageData) {
+      return;
+    }
+
+    const image = await context.document.embedPng(
+      Buffer.from(imageData, 'base64'),
+    );
+
+    context.page.drawImage(image, {
+      x: 455,
+      y: 694,
+      width: 92,
+      height: 92,
+    });
+    context.page.drawText('Prescription QR', {
+      x: 455,
+      y: 680,
+      size: 8,
+      font: context.regularFont,
+      color: rgb(0.35, 0.35, 0.35),
+    });
   }
 
   private drawSection(context: RenderContext, title: string, lines: string[]) {

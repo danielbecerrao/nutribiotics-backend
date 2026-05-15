@@ -1,7 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PrescriptionStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEnum, IsISO8601, IsOptional } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsISO8601,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { SortOrder } from '../../common/dto/sort-order-query.dto';
 
@@ -62,4 +68,12 @@ export class ListDoctorPrescriptionsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(SortOrder)
   order = SortOrder.desc;
+
+  @ApiPropertyOptional({
+    description: 'Text search over prescription notes and item names.',
+    example: 'vitamin',
+  })
+  @IsOptional()
+  @IsString()
+  q?: string;
 }

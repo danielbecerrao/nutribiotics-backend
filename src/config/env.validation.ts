@@ -13,6 +13,8 @@ export const envValidationSchema = Joi.object({
   JWT_REFRESH_SECRET: Joi.string().min(16).required(),
   JWT_ACCESS_TTL: Joi.string().pattern(tokenTtlPattern).required(),
   JWT_REFRESH_TTL: Joi.string().pattern(tokenTtlPattern).required(),
+  EMAIL_PROVIDER: Joi.string().valid('console').default('console'),
+  EMAIL_FROM: Joi.string().email().default('noreply@nutribiotics.local'),
   APP_ORIGIN: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .required(),
