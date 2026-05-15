@@ -1,6 +1,8 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Doctor, Patient } from '@prisma/client';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrescriptionPdfRenderer } from './pdf/prescription-pdf.renderer';
 import { PrescriptionsService } from './prescriptions.service';
@@ -24,6 +26,14 @@ describe('PrescriptionsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PrescriptionsService,
+        {
+          provide: AuditLogsService,
+          useValue: { recordPrescriptionConsumed: jest.fn() },
+        },
+        {
+          provide: EmailService,
+          useValue: { sendPrescriptionCreated: jest.fn() },
+        },
         {
           provide: PrismaService,
           useValue: prismaService,

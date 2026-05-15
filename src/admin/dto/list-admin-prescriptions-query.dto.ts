@@ -52,4 +52,12 @@ export class ListAdminPrescriptionsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(SortOrder)
   order = SortOrder.desc;
+
+  @ApiPropertyOptional({
+    description: 'Text search over prescription notes and item names.',
+    example: 'vitamin',
+  })
+  @IsOptional()
+  @IsString()
+  q?: string;
 }

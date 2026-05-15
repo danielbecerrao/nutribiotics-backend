@@ -115,6 +115,18 @@ describe('Integrated prescription flow (e2e)', () => {
       data: { createdAt: metricsDate },
     });
 
+    const doctorSearchResponse = await request(server)
+      .get('/prescriptions?q=Vitamin&page=1&limit=10')
+      .set('Authorization', `Bearer ${doctorSession.accessToken}`)
+      .expect(200);
+    const doctorSearchBody = doctorSearchResponse.body as {
+      data: PrescriptionResponseBody[];
+    };
+
+    expect(
+      doctorSearchBody.data.some((item) => item.id === createdPrescription.id),
+    ).toBe(true);
+
     const patientSession = await loginTestUser(
       app,
       actors.patientUser.email,
@@ -122,7 +134,7 @@ describe('Integrated prescription flow (e2e)', () => {
     );
 
     const listResponse = await request(server)
-      .get('/me/prescriptions?status=pending&page=1&limit=10')
+      .get('/me/prescriptions?status=pending&q=Vitamin&page=1&limit=10')
       .set('Authorization', `Bearer ${patientSession.accessToken}`)
       .expect(200);
     const listBody = listResponse.body as {
@@ -191,6 +203,30 @@ describe('Integrated prescription flow (e2e)', () => {
     expect(metrics.topDoctors[0]).toMatchObject({
       doctorId: actors.doctor.id,
       total: 1,
+    });
+
+    const auditResponse = await request(server)
+      .get('/admin/audit-logs?action=prescription_consumed&page=1&limit=5')
+      .set('Authorization', `Bearer ${adminSession.accessToken}`)
+      .expect(200);
+    const auditLogs = auditResponse.body as {
+      data: Array<{
+        action: string;
+        actor: {
+          email: string;
+        } | null;
+        prescriptionId: string | null;
+      }>;
+      total: number;
+    };
+
+    expect(auditLogs.total).toBeGreaterThanOrEqual(1);
+    expect(auditLogs.data[0]).toMatchObject({
+      action: 'prescription_consumed',
+      actor: {
+        email: actors.patientUser.email,
+      },
+      prescriptionId: createdPrescription.id,
     });
   });
 

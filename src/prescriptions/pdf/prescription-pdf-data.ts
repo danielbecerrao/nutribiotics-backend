@@ -11,6 +11,7 @@ export interface PrescriptionPdfData {
   code: string;
   status: string;
   createdAt: Date;
+  qrCodeValue: string;
   patient: {
     name: string;
     email: string;
@@ -31,6 +32,7 @@ export function toPrescriptionPdfData(
     code: prescription.code,
     status: prescription.status,
     createdAt: prescription.createdAt,
+    qrCodeValue: `Prescription ${prescription.code}`,
     patient: {
       name: prescription.patient.user.name,
       email: prescription.patient.user.email,

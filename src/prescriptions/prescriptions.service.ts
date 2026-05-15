@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrescriptionStatus, Prisma, Role } from '@prisma/client';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import type { AccessTokenPayload } from '../auth/types/access-token-payload.type';
 import { buildPrismaDateRangeFilter } from '../common/helpers/prisma-date-filter.helper';
 import {
@@ -12,6 +13,7 @@ import {
   getPagination,
 } from '../common/helpers/pagination.helper';
 import { getCreatedAtOrder } from '../common/helpers/sort-order.helper';
+import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { ListDoctorPrescriptionsQueryDto } from './dto/list-doctor-prescriptions-query.dto';
@@ -27,6 +29,8 @@ type PrismaExecutor = PrismaService | Prisma.TransactionClient;
 @Injectable()
 export class PrescriptionsService {
   constructor(
+    private readonly auditLogsService: AuditLogsService,
+    private readonly emailService: EmailService,
     private readonly prismaService: PrismaService,
     private readonly prescriptionPdfRenderer: PrescriptionPdfRenderer,
   ) {}
@@ -60,7 +64,16 @@ export class PrescriptionsService {
       },
     );
 
-    return toPublicPrescription(prescription);
+    const publicPrescription = toPublicPrescription(prescription);
+
+    this.emailService.sendPrescriptionCreated({
+      code: prescription.code,
+      doctorName: prescription.author.user.name,
+      patientEmail: prescription.patient.user.email,
+      patientName: prescription.patient.user.name,
+    });
+
+    return publicPrescription;
   }
 
   async listDoctorPrescriptions(
@@ -81,6 +94,8 @@ export class PrescriptionsService {
     if (createdAt) {
       where.createdAt = createdAt;
     }
+
+    this.applySearchFilter(where, query.q);
 
     const [total, data] = await this.prismaService.$transaction([
       this.prismaService.prescription.count({ where }),
@@ -113,6 +128,8 @@ export class PrescriptionsService {
     if (query.status) {
       where.status = query.status;
     }
+
+    this.applySearchFilter(where, query.q);
 
     const [total, data] = await this.prismaService.$transaction([
       this.prismaService.prescription.count({ where }),
@@ -212,16 +229,61 @@ export class PrescriptionsService {
       throw new ConflictException('Prescription already consumed');
     }
 
-    const updatedPrescription = await this.prismaService.prescription.update({
-      where: { id: prescription.id },
-      data: {
-        status: PrescriptionStatus.consumed,
-        consumedAt: new Date(),
+    const updatedPrescription = await this.prismaService.$transaction(
+      async (transaction) => {
+        const updated = await transaction.prescription.update({
+          where: { id: prescription.id },
+          data: {
+            status: PrescriptionStatus.consumed,
+            consumedAt: new Date(),
+          },
+          include: prescriptionWithRelations,
+        });
+
+        await this.auditLogsService.recordPrescriptionConsumed(
+          {
+            actorUserId: userId,
+            patientId: patient.id,
+            prescriptionId: prescription.id,
+          },
+          transaction,
+        );
+
+        return updated;
       },
-      include: prescriptionWithRelations,
-    });
+    );
 
     return toPublicPrescription(updatedPrescription);
+  }
+
+  private applySearchFilter(
+    where: Prisma.PrescriptionWhereInput,
+    search?: string,
+  ) {
+    const normalizedSearch = search?.trim();
+
+    if (!normalizedSearch) {
+      return;
+    }
+
+    where.OR = [
+      {
+        notes: {
+          contains: normalizedSearch,
+          mode: Prisma.QueryMode.insensitive,
+        },
+      },
+      {
+        items: {
+          some: {
+            name: {
+              contains: normalizedSearch,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+        },
+      },
+    ];
   }
 
   private async findPrescriptionForDownload(

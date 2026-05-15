@@ -17,6 +17,10 @@ enum PrescriptionStatus {
   consumed
 }
 
+enum AuditLogAction {
+  prescription_consumed
+}
+
 model User {
   id               String   @id @default(cuid())
   email            String   @unique
@@ -26,8 +30,9 @@ model User {
   createdAt        DateTime @default(now())
   refreshTokenHash String?
 
-  doctor  Doctor?
-  patient Patient?
+  doctor    Doctor?
+  patient   Patient?
+  auditLogs AuditLog[]
 }
 
 model Doctor {
@@ -58,13 +63,30 @@ model Prescription {
   patientId  String
   authorId   String
 
-  patient Patient            @relation(fields: [patientId], references: [id])
-  author  Doctor             @relation("AuthoredBy", fields: [authorId], references: [id])
-  items   PrescriptionItem[]
+  patient   Patient            @relation(fields: [patientId], references: [id])
+  author    Doctor             @relation("AuthoredBy", fields: [authorId], references: [id])
+  items     PrescriptionItem[]
+  auditLogs AuditLog[]
 
   @@index([status, createdAt])
   @@index([patientId])
   @@index([authorId])
+}
+
+model AuditLog {
+  id             String         @id @default(cuid())
+  action         AuditLogAction
+  actorUserId    String?
+  prescriptionId String?
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+
+  actor        User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  prescription Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@index([actorUserId])
+  @@index([prescriptionId])
 }
 
 model PrescriptionItem {
